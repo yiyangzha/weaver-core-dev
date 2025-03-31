@@ -37,7 +37,7 @@ def get_model(data_config, **kwargs):
 
     # use SwiGLU-default setup
     cfg = dict(
-        input_dims=tuple(map(lambda x: len(data_config.input_dicts[x]), ['cpf_features', 'npf_features'])),
+        input_dims=tuple(map(lambda x: len(data_config.input_dicts[x]), ['pf_features'])),
         share_embed=False,
         num_classes=num_nodes,
         # network configurations

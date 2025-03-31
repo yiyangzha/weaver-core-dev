@@ -1152,6 +1152,25 @@ class ParticleTransformerTagger(nn.Module):
 
             return self.part(x, v, mask)
 
+def pad_to_fixed(tensor_list, target_length):
+    """
+    tensor_list: list中每个 tensor 的形状为 (C, L_i)，其中 L_i 可能不一致
+    返回：形状 (N, C, target_length) 的 tensor，
+          若 L_i < target_length，则在末尾填0；
+          若 L_i > target_length，则截断到 target_length。
+    """
+    padded_list = []
+    for t in tensor_list:
+        L = t.shape[1]
+        if L < target_length:
+            pad_size = target_length - L
+            t_pad = F.pad(t, (0, pad_size), mode='constant', value=0)
+        elif L > target_length:
+            t_pad = t[:, :target_length]
+        else:
+            t_pad = t
+        padded_list.append(t_pad.unsqueeze(0))
+    return torch.cat(padded_list, dim=0)
 
 class ParticleTransformerTagger_ncoll(nn.Module):
 
@@ -1191,10 +1210,13 @@ class ParticleTransformerTagger_ncoll(nn.Module):
         self.share_embed = share_embed
         self.trimmers = nn.ModuleList()
         self.input_embeds = nn.ModuleList()
+        self.input_embeds.append(Embed(19, embed_dims, activation=activation))
+        self.input_embeds.append(Embed(7, embed_dims, activation=activation))
+        self._input_embeds_updated = True
         for dim in input_dims:
             self.trimmers.append(SequenceTrimmer(enabled=trim and not for_inference))
-            if self.share_embed == False:
-                self.input_embeds.append(Embed(dim, embed_dims, activation=activation))
+            #if self.share_embed == False:
+            #    self.input_embeds.append(Embed(dim, embed_dims, activation=activation))
         if self.share_embed:
             self.input_embed = Embed(input_dims[0], embed_dims, activation=activation)
 
@@ -1228,26 +1250,6 @@ class ParticleTransformerTagger_ncoll(nn.Module):
     def no_weight_decay(self):
         return {'part.cls_token', }
 
-    def pad_to_fixed(tensor_list, target_length):
-        """
-        tensor_list: list中每个 tensor 的形状为 (C, L_i)，其中 L_i 可能不一致
-        返回：形状 (N, C, target_length) 的 tensor，
-              若 L_i < target_length，则在末尾填0；
-              若 L_i > target_length，则截断到 target_length。
-        """
-        padded_list = []
-        for t in tensor_list:
-            L = t.shape[1]
-            if L < target_length:
-                pad_size = target_length - L
-                t_pad = F.pad(t, (0, pad_size), mode='constant', value=0)
-            elif L > target_length:
-                t_pad = t[:, :target_length]
-            else:
-                t_pad = t
-            padded_list.append(t_pad.unsqueeze(0))
-        return torch.cat(padded_list, dim=0)
-
     # def forward(self, cpf_x, cpf_v=None, cpf_mask=None, npf_x=None, npf_v=None, npf_mask=None, sv_x=None, sv_v=None, sv_mask=None):
     def forward(self, *args):
         # x: (N, C, P)
@@ -1255,7 +1257,7 @@ class ParticleTransformerTagger_ncoll(nn.Module):
         # mask: (N, 1, P) -- real particle = 1, padded = 0
 
         if len(args) == 3:
-            pf_features, pf_vectors, pf_mask = args  # pf_features: (N,28,P), pf_vectors: (N,4,P), pf_mask: (N,1,P)
+            pf_features, pf_vectors, pf_mask, _ = self.trimmers[0](args[0], args[1], args[2])  # pf_features: (N,28,P), pf_vectors: (N,4,P), pf_mask: (N,1,P)
             batch_size = pf_features.size(0)
             charged_feats_list = []
             charged_vecs_list = []
@@ -1264,7 +1266,7 @@ class ParticleTransformerTagger_ncoll(nn.Module):
             neutral_vecs_list = []
             neutral_masks_list = []
             for i in range(batch_size):
-                feat = pf_features[i]  # (28, P)
+                feat = pf_features[i]  # (21, P)
                 vec = pf_vectors[i]    # (4, P)
                 # 根据 pfcand_charge 判断：通道1
                 is_charged = feat[1] != 0  # (P,) 布尔向量  #
@@ -1333,16 +1335,22 @@ class ParticleTransformerTagger_ncoll(nn.Module):
                 neutral_feats_padded, neutral_vecs_padded, neutral_masks_padded
             ]
             num_colls = 2
+                    
         else:
             new_args = args
             num_colls = self.num_colls
 
         assert len(new_args) == 3 * num_colls
 
+        if num_colls > len(self.trimmers):
+            local_trimmers = torch.nn.ModuleList([self.trimmers[0] for _ in range(num_colls)])
+        else:
+            local_trimmers = self.trimmers
+
         with torch.no_grad():
             x, v, mask = [], [], []
             for i in range(num_colls):
-                x_, v_, mask_, _ = self.trimmers[i](new_args[i*3], new_args[i*3+1], new_args[i*3+2])
+                x_, v_, mask_, _ = local_trimmers[i](new_args[i*3], new_args[i*3+1], new_args[i*3+2])
                 x.append(x_)
                 v.append(v_)
                 mask.append(mask_)
