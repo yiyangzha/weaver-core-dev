@@ -1048,13 +1048,14 @@ class ParticleTransformer(nn.Module):
 
                     # 3. 选择需要的mass校正特征
                     selected_mass_corr = torch.cat([
+                        output_rest[:, [mass_corr_indices['massCorrGeneric']]]
                         massCorr_X2p,
                         massCorr_W2p,
                         output_rest[:, [mass_corr_indices['massCorrResonance']]]
-                    ], dim=1)  # 3个特征
+                    ], dim=1)  # 4个特征
 
                     # ===== 最终输出合并 =====
-                    output = torch.cat([new_probs, selected_mass_corr], dim=1)  # 15 + 3 = 18个特征
+                    output = torch.cat([new_probs, selected_mass_corr], dim=1)  # 15 + 4 = 19个特征
 
                 if self.export_params.get('concat_hid', False):
                     output = torch.cat([output, x_cls], dim=-1)
@@ -1152,26 +1153,6 @@ class ParticleTransformerTagger(nn.Module):
 
             return self.part(x, v, mask)
 
-def pad_to_fixed(tensor_list, target_length):
-    """
-    tensor_list: list中每个 tensor 的形状为 (C, L_i)，其中 L_i 可能不一致
-    返回：形状 (N, C, target_length) 的 tensor，
-          若 L_i < target_length，则在末尾填0；
-          若 L_i > target_length，则截断到 target_length。
-    """
-    padded_list = []
-    for t in tensor_list:
-        L = t.shape[1]
-        if L < target_length:
-            pad_size = target_length - L
-            t_pad = F.pad(t, (0, pad_size), mode='constant', value=0)
-        elif L > target_length:
-            t_pad = t[:, :target_length]
-        else:
-            t_pad = t
-        padded_list.append(t_pad.unsqueeze(0))
-    return torch.cat(padded_list, dim=0)
-
 class ParticleTransformerTagger_ncoll(nn.Module):
 
     def __init__(self,
@@ -1205,18 +1186,20 @@ class ParticleTransformerTagger_ncoll(nn.Module):
         super().__init__(**kwargs)
 
         self.use_amp = use_amp
-
-        self.num_colls = len(input_dims)
+        if len(input_dims) == 1:
+            self.num_colls = len(input_dims) * 2
+            input_dims[0] = 19
+            input_dims[1] = 7
+        elif:
+            self.num_colls = len(input_dims)
+        
         self.share_embed = share_embed
         self.trimmers = nn.ModuleList()
         self.input_embeds = nn.ModuleList()
-        self.input_embeds.append(Embed(19, embed_dims, activation=activation))
-        self.input_embeds.append(Embed(7, embed_dims, activation=activation))
-        self._input_embeds_updated = True
         for dim in input_dims:
             self.trimmers.append(SequenceTrimmer(enabled=trim and not for_inference))
-            #if self.share_embed == False:
-            #    self.input_embeds.append(Embed(dim, embed_dims, activation=activation))
+            if self.share_embed == False:
+                self.input_embeds.append(Embed(dim, embed_dims, activation=activation))
         if self.share_embed:
             self.input_embed = Embed(input_dims[0], embed_dims, activation=activation)
 
@@ -1257,100 +1240,82 @@ class ParticleTransformerTagger_ncoll(nn.Module):
         # mask: (N, 1, P) -- real particle = 1, padded = 0
 
         if len(args) == 3:
-            pf_features, pf_vectors, pf_mask, _ = self.trimmers[0](args[0], args[1], args[2])  # pf_features: (N,28,P), pf_vectors: (N,4,P), pf_mask: (N,1,P)
-            batch_size = pf_features.size(0)
-            charged_feats_list = []
-            charged_vecs_list = []
-            charged_masks_list = []
-            neutral_feats_list = []
-            neutral_vecs_list = []
-            neutral_masks_list = []
-            for i in range(batch_size):
-                feat = pf_features[i]  # (21, P)
-                vec = pf_vectors[i]    # (4, P)
-                # 根据 pfcand_charge 判断：通道1
-                is_charged = feat[1] != 0  # (P,) 布尔向量  #
-            
-                # 带电部分
-                c_pt_log       = feat[10][is_charged]  #
-                c_e_log        = feat[19][is_charged]  #
-                c_etarel       = feat[8][is_charged]  #
-                c_phirel       = feat[7][is_charged]  #
-                c_abseta       = feat[9][is_charged]  #
-                c_charge       = feat[1][is_charged]  #
-                c_isEl         = feat[2][is_charged]  #
-                c_isMu         = feat[3][is_charged]  #
-                c_isChargedHad = feat[4][is_charged]  #
-                c_lostInnerHits= feat[20][is_charged]  #
-                c_normchi2     = feat[11][is_charged]  #
-                c_quality      = feat[0][is_charged]  #
-                c_dz           = feat[12][is_charged]  #
-                c_dzsig        = feat[18][is_charged]  #
-                c_dxy          = feat[13][is_charged]  #
-                c_dxysig       = feat[14][is_charged]  #
-                c_btagEtaRel   = feat[15][is_charged]  #
-                c_btagPtRatio  = feat[16][is_charged]  #
-                c_btagPParRatio= feat[17][is_charged]  #
-                charged_feats = torch.stack([
-                    c_pt_log, c_e_log, c_etarel, c_phirel, c_abseta,
-                    c_charge, c_isEl, c_isMu, c_isChargedHad, c_lostInnerHits,
-                    c_normchi2, c_quality, c_dz, c_dzsig, c_dxy,
-                    c_dxysig, c_btagEtaRel, c_btagPtRatio, c_btagPParRatio
-                ], dim=0)  # (19, num_charged)
-                charged_vecs = vec[:, is_charged]  # (4, num_charged)
-                charged_mask = torch.ones((1, charged_vecs.size(1)), device=vec.device, dtype=pf_mask.dtype)
+            with torch.no_grad():
+                pf_features, pf_vectors, pf_mask, _ = self.trimmers[0](args[0], args[1], args[2])
+                # pf_features: (N, 28, P)；pf_vectors: (N,4,P)；pf_mask: (N,1,P)
+                N, C, P = pf_features.shape
 
-                # 中性部分
-                n_pt_log       = feat[10][~is_charged]  #
-                n_e_log        = feat[19][~is_charged]  #
-                n_etarel       = feat[8][~is_charged]  #
-                n_phirel       = feat[7][~is_charged]  #
-                n_abseta       = feat[9][~is_charged]  #
-                n_isGamma      = feat[5][~is_charged]  #
-                n_isNeutralHad = feat[6][~is_charged]  #
-                neutral_feats = torch.stack([
-                    n_pt_log, n_e_log, n_etarel, n_phirel, n_abseta, n_isGamma, n_isNeutralHad
-                ], dim=0)  # (7, num_neutral)
-                neutral_vecs = vec[:, ~is_charged]  # (4, num_neutral)
-                neutral_mask = torch.ones((1, neutral_vecs.size(1)), device=vec.device, dtype=pf_mask.dtype)
+                # 根据通道1判断带电情况
+                charged_mask_bool = (pf_features[:, 1, :] != 0)  # (N, P)
+                neutral_mask_bool = ~charged_mask_bool
 
-                charged_feats_list.append(charged_feats)
-                charged_vecs_list.append(charged_vecs)
-                charged_masks_list.append(charged_mask)
-                neutral_feats_list.append(neutral_feats)
-                neutral_vecs_list.append(neutral_vecs)
-                neutral_masks_list.append(neutral_mask)
+                # 定义需要提取的特征通道索引（顺序与原循环完全一致）
+                charged_channels = torch.tensor(
+                    [10, 19, 8, 7, 9, 1, 2, 3, 4, 20, 11, 0, 12, 18, 13, 14, 15, 16, 17],
+                    device=pf_features.device
+                )
+                neutral_channels = torch.tensor(
+                    [10, 19, 8, 7, 9, 5, 6],
+                    device=pf_features.device
+                )
 
-            # 带电部分固定补齐到长度 90；中性部分固定到 60
-            charged_feats_padded = pad_to_fixed(charged_feats_list, target_length=90)    # (N, 19, 90)
-            charged_vecs_padded  = pad_to_fixed(charged_vecs_list, target_length=90)      # (N, 4, 90)
-            charged_masks_padded = pad_to_fixed(charged_masks_list, target_length=90)      # (N, 1, 90)
-            neutral_feats_padded = pad_to_fixed(neutral_feats_list, target_length=60)      # (N, 7, 60)
-            neutral_vecs_padded  = pad_to_fixed(neutral_vecs_list, target_length=60)        # (N, 4, 60)
-            neutral_masks_padded = pad_to_fixed(neutral_masks_list, target_length=60)        # (N, 1, 60)
+                # 提取所有事件的对应特征（形状：(N, feat_dim, P)）
+                charged_feats_all = pf_features[:, charged_channels, :]  # (N, 19, P)
+                neutral_feats_all = pf_features[:, neutral_channels, :]  # (N, 7, P)
 
-            # 构造新的参数列表 new_args，顺序必须与原 forward 保持一致
-            new_args = [
-                charged_feats_padded, charged_vecs_padded, charged_masks_padded,
-                neutral_feats_padded, neutral_vecs_padded, neutral_masks_padded
-            ]
-            num_colls = 2
-                    
-        else:
-            new_args = args
-            num_colls = self.num_colls
+                # 对于向量，同样利用整个 batch 的数据
+                charged_vecs_all  = pf_vectors  # (N, 4, P)
+                neutral_vecs_all  = pf_vectors  # (N, 4, P)
+
+                def gather_and_pad(x, mask, max_len):
+                    """
+                    x: (N, F, P)  —— 待提取的特征或向量
+                    mask: (N, P)   —— 对应的布尔 mask
+                    max_len: 固定补齐长度（charged:90, neutral:60）
+                    返回：gathered: (N, F, max_len)，valid: (N, max_len) 表示真实数据位置
+                    """
+                    N, F, P = x.shape
+                    # 构造每个事件 [0,1,...,P-1] 的索引
+                    idx = torch.arange(P, device=x.device).unsqueeze(0).expand(N, P)  # (N, P)
+                    # 将不满足条件的位置赋值为一个大数（这里选 P）
+                    modified_idx = idx.clone()
+                    modified_idx[~mask] = P
+                    # 沿粒子维度排序，满足条件的索引会排在前面（原始顺序不变，因为 valid 的索引本身是递增的）
+                    sorted_idx, _ = torch.sort(modified_idx, dim=1)
+                    # 取出前 max_len 个索引
+                    selected_idx = sorted_idx[:, :max_len]  # (N, max_len)
+                    # 利用 advanced indexing 提取对应的特征（或向量）
+                    gathered = x.gather(2, selected_idx.unsqueeze(1).expand(N, F, max_len))
+                    # 对于不足 max_len 的部分，用有效位置 mask 补零
+                    counts = mask.sum(dim=1)  # 每个事件中满足条件的数目，形状 (N,)
+                    pos = torch.arange(max_len, device=x.device).unsqueeze(0).expand(N, max_len)
+                    valid = pos < counts.unsqueeze(1)  # (N, max_len) 布尔张量
+                    gathered = gathered * valid.unsqueeze(1).to(x.dtype)
+                    return gathered, valid
+
+                # 分别对带电和中性部分进行采集和补齐
+                charged_feats_padded, charged_valid = gather_and_pad(charged_feats_all, charged_mask_bool, max_len=90)
+                charged_vecs_padded, _ = gather_and_pad(charged_vecs_all, charged_mask_bool, max_len=90)
+                charged_masks_padded = charged_valid.unsqueeze(1).to(pf_mask.dtype)  # (N, 1, 90)
+
+                neutral_feats_padded, neutral_valid = gather_and_pad(neutral_feats_all, neutral_mask_bool, max_len=60)
+                neutral_vecs_padded, _ = gather_and_pad(neutral_vecs_all, neutral_mask_bool, max_len=60)
+                neutral_masks_padded = neutral_valid.unsqueeze(1).to(pf_mask.dtype)  # (N, 1, 60)
+
+                # 构造新的参数列表 new_args，顺序必须与原 forward 保持一致
+                new_args = [
+                    charged_feats_padded, charged_vecs_padded, charged_masks_padded,
+                    neutral_feats_padded, neutral_vecs_padded, neutral_masks_padded
+                ]
+    else:
+        new_args = args
 
         assert len(new_args) == 3 * num_colls
 
-        if num_colls > len(self.trimmers):
-            local_trimmers = torch.nn.ModuleList([self.trimmers[0] for _ in range(num_colls)])
-        else:
-            local_trimmers = self.trimmers
-
         with torch.no_grad():
             x, v, mask = [], [], []
-            for i in range(num_colls):
-                x_, v_, mask_, _ = local_trimmers[i](new_args[i*3], new_args[i*3+1], new_args[i*3+2])
+            for i in range(self.num_colls):
+                x_, v_, mask_, _ = self.trimmers[i](new_args[i*3], new_args[i*3+1], new_args[i*3+2])
                 x.append(x_)
                 v.append(v_)
                 mask.append(mask_)
@@ -1360,9 +1325,9 @@ class ParticleTransformerTagger_ncoll(nn.Module):
 
         with torch.autocast('cuda', enabled=self.use_amp):
             if self.share_embed == False:
-                x = [self.input_embeds[i](x[i]) for i in range(num_colls)] # after embed: (batch, seq_len, embed_dim)
+                x = [self.input_embeds[i](x[i]) for i in range(self.num_colls)] # after embed: (batch, seq_len, embed_dim)
             else:
-                x = [self.input_embed(x[i]) for i in range(num_colls)]
+                x = [self.input_embed(x[i]) for i in range(self.num_colls)]
             x = torch.cat(x, dim=1)
 
             return self.part(x, v, mask)
