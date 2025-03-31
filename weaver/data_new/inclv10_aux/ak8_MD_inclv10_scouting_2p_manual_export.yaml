@@ -3,7 +3,7 @@
 
 # to select scouting jets, ensure that QCD scouting jets from the resonant (signal) samples are not included (they are not excluded in the samples; only reco QCD jets are excluded)
 selection: >-
-    (jet_tightId==1) & (jet_no<2) & (scoutfj_pt>200) & (scoutfj_pt<5000) & (scoutfj_sdmass>0) & (scoutfj_sdmass<650) & (ak.num(scoutpfcand_px) > 0) &
+    (jet_tightId==1) & (jet_no<2) & (scoutfj_pt>200) & (scoutfj_pt<5000) & (scoutfj_sdmass>0) & (scoutfj_sdmass<650) & (ak.num(pfcand_px) > 0) &
     (
       ((sample_isQCD==1) & (scoutfj_label >= 309) & (scoutfj_label < 314) & (event_no%7!=0)) |
       ((sample_isQCD==0) & (scoutfj_isQCD==0))
@@ -68,48 +68,6 @@ new_variables:
         ak.where((scoutfj_label >= 25) & (scoutfj_label <= 29), scoutfj_label - 13,
         ak.where((scoutfj_label >= 309) & (scoutfj_label <= 313), scoutfj_label - 292, 10000)))))))))))
 
-    # charged and neutral scoutingpfcand
-    is_charged: scoutpfcand_charge != 0
-    cscoutpfcand_pt_log: scoutpfcand_pt_log[is_charged]
-    cscoutpfcand_e_log: scoutpfcand_e_log[is_charged]
-    cscoutpfcand_etarel: scoutpfcand_etarel[is_charged]
-    cscoutpfcand_phirel: scoutpfcand_phirel[is_charged]
-    cscoutpfcand_abseta: scoutpfcand_abseta[is_charged]
-    cscoutpfcand_charge: scoutpfcand_charge[is_charged]
-    cscoutpfcand_isEl: scoutpfcand_isEl[is_charged]
-    cscoutpfcand_isMu: scoutpfcand_isMu[is_charged]
-    cscoutpfcand_isChargedHad: scoutpfcand_isChargedHad[is_charged]
-    cscoutpfcand_lostInnerHits: scoutpfcand_lostInnerHits[is_charged]
-    cscoutpfcand_normchi2: scoutpfcand_normchi2[is_charged]
-    cscoutpfcand_quality: scoutpfcand_quality[is_charged]
-    cscoutpfcand_dz: scoutpfcand_dz[is_charged]
-    cscoutpfcand_dzsig: scoutpfcand_dzsig[is_charged]
-    cscoutpfcand_dxy: scoutpfcand_dxy[is_charged]
-    cscoutpfcand_dxysig: scoutpfcand_dxysig[is_charged]
-    cscoutpfcand_btagEtaRel: scoutpfcand_btagEtaRel[is_charged]
-    cscoutpfcand_btagPtRatio: scoutpfcand_btagPtRatio[is_charged]
-    cscoutpfcand_btagPParRatio: scoutpfcand_btagPParRatio[is_charged]
-    cscoutpfcand_px: scoutpfcand_px[is_charged]
-    cscoutpfcand_py: scoutpfcand_py[is_charged]
-    cscoutpfcand_pz: scoutpfcand_pz[is_charged]
-    cscoutpfcand_energy: scoutpfcand_energy[is_charged]
-
-    nscoutpfcand_pt_log: scoutpfcand_pt_log[~is_charged]
-    nscoutpfcand_e_log: scoutpfcand_e_log[~is_charged]
-    nscoutpfcand_etarel: scoutpfcand_etarel[~is_charged]
-    nscoutpfcand_phirel: scoutpfcand_phirel[~is_charged]
-    nscoutpfcand_abseta: scoutpfcand_abseta[~is_charged]
-    nscoutpfcand_isGamma: scoutpfcand_isGamma[~is_charged]
-    nscoutpfcand_isNeutralHad: scoutpfcand_isNeutralHad[~is_charged]
-    nscoutpfcand_px: scoutpfcand_px[~is_charged]
-    nscoutpfcand_py: scoutpfcand_py[~is_charged]
-    nscoutpfcand_pz: scoutpfcand_pz[~is_charged]
-    nscoutpfcand_energy: scoutpfcand_energy[~is_charged]
-
-    # masks
-    cscoutpfcand_mask: ak.ones_like(cscoutpfcand_px)
-    nscoutpfcand_mask: ak.ones_like(nscoutpfcand_px)
-
 preprocess:
     ### method: [manual, auto] - whether to use manually specified parameters for variable standardization
     method: manual
@@ -117,8 +75,8 @@ preprocess:
     data_fraction:
 
 inputs:
-    cpf_features:
-        length: 90
+    pf_features:
+        length: 200
         pad_mode: wrap
         vars:
             ### [format 1]: var_name (no transformation)
@@ -128,62 +86,41 @@ inputs:
             ###              clip_min(optional, default=-5),
             ###              clip_max(optional, default=5),
             ###              pad_value(optional, default=0)]
-            - [cscoutpfcand_pt_log, 1, 0.5]
-            - [cscoutpfcand_e_log, 1.3, 0.5]
-            - cscoutpfcand_etarel
-            - cscoutpfcand_phirel
-            - [cscoutpfcand_abseta, 0.6, 1.6]
-            - cscoutpfcand_charge
-            - cscoutpfcand_isEl
-            - cscoutpfcand_isMu
-            - cscoutpfcand_isChargedHad
-            - cscoutpfcand_lostInnerHits
-            - [cscoutpfcand_normchi2, 5, 0.2]
-            - [cscoutpfcand_quality, 0, 0.2]
-            - [cscoutpfcand_dz, 0, 180]
-            - [cscoutpfcand_dzsig, 0, 0.9]
-            - [cscoutpfcand_dxy, 0.0, 300]
-            - [cscoutpfcand_dxysig, 0, 1.0]
-            - [cscoutpfcand_btagEtaRel, 1.5, 0.5]
-            - [cscoutpfcand_btagPtRatio, 0, 1]
-            - [cscoutpfcand_btagPParRatio, 0, 1]
-    cpf_vectors:
-        length: 90
+            - [pfcand_quality, 0, 0.2]
+            - pfcand_charge
+            - pfcand_isEl
+            - pfcand_isMu
+            - pfcand_isChargedHad
+            - pfcand_isGamma
+            - pfcand_isNeutralHad
+            - pfcand_phirel
+            - pfcand_etarel
+            - [pfcand_abseta, 0.6, 1.6]
+            - [pfcand_pt_log, 1, 0.5]
+            - [pfcand_normchi2, 5, 0.2]
+            - [pfcand_dz, 0, 180]
+            - [pfcand_dxy, 0.0, 300]
+            - [pfcand_dxysig, 0, 1.0]
+            - [pfcand_btagEtaRel, 1.5, 0.5]
+            - [pfcand_btagPtRatio, 0, 1]
+            - [pfcand_btagPParRatio, 0, 1]
+            - [pfcand_dzsig, 0, 0.9]
+            - [pfcand_e_log_nopuppi, 1.3, 0.5]
+            - pfcand_lostInnerHits
+    pf_vectors:
+        length: 200
         pad_mode: wrap
         vars:
-            - [cscoutpfcand_px, null]
-            - [cscoutpfcand_py, null]
-            - [cscoutpfcand_pz, null]
-            - [cscoutpfcand_energy, null]
-    cpf_mask:
-        length: 90
+            - [pfcand_px, null]
+            - [pfcand_py, null]
+            - [pfcand_pz, null]
+            - [pfcand_energy, null]
+    pf_mask:
+        length: 200
         pad_mode: constant
         vars:
-            - cscoutpfcand_mask
-    npf_features:
-        length: 60
-        pad_mode: wrap
-        vars:
-            - [nscoutpfcand_pt_log, 1, 0.5]
-            - [nscoutpfcand_e_log, 1.3, 0.5]
-            - nscoutpfcand_etarel
-            - nscoutpfcand_phirel
-            - [nscoutpfcand_abseta, 0.6, 1.6]
-            - nscoutpfcand_isGamma
-            - nscoutpfcand_isNeutralHad
-    npf_vectors:
-        length: 60
-        pad_mode: wrap
-        vars:
-            - [nscoutpfcand_px, null]
-            - [nscoutpfcand_py, null]
-            - [nscoutpfcand_pz, null]
-            - [nscoutpfcand_energy, null]
-    npf_mask:
-        length: 60
-        pad_mode: constant
-        vars:
-            - nscoutpfcand_mask
+            - pfcand_mask
+
 
 labels:
     ### type can be `simple`, `custom`, 'hybrid'

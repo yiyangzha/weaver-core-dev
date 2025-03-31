@@ -253,7 +253,7 @@ class DataConfig(object):
             for var_name in v:
                 j[k]['max_length'] = self.preprocess_params[var_name]['length']
                 j[k]['min_length'] = None
-                min_length_dict = {'pfcand': 16, 'cpfcandlt': 12, 'npfcand': 8, 'sv': 1}
+                min_length_dict = {'pfcand': 16, 'cpfcandlt': 12, 'npfcand': 8, 'sv': 1, 'scoutpfcand': 16, 'cscoutpfcand': 12, 'nscoutpfcand': 8}
                 for s, min_len in min_length_dict.items():
                     if var_name.startswith(s):
                         j[k]['min_length'] = min_len
