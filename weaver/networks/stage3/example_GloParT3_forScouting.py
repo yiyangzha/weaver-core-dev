@@ -21,7 +21,7 @@ from utils.nn.tools import (
 )
 from utils.import_tools import import_module
 
-ParticleTransformerTagger_ncoll = import_module(os.path.join(os.path.dirname(__file__), 'ParticleTransformer2024Plus_forScouting.py'), 'ParT').ParticleTransformerTagger_ncoll
+ParticleTransformerTagger_ncoll = import_module(os.path.join(os.path.dirname(__file__), '../ParticleTransformer2024Plus.py'), 'ParT').ParticleTransformerTagger_ncoll  #_forScouting
 
 # Adapted from model in example_ParticleTransformer2024PlusTagger_unified2.py
 
@@ -37,7 +37,7 @@ def get_model(data_config, **kwargs):
 
     # use SwiGLU-default setup
     cfg = dict(
-        input_dims=tuple(map(lambda x: len(data_config.input_dicts[x]), ['pf_features'])),
+        input_dims=tuple(map(lambda x: len(data_config.input_dicts[x]), ['cpf_features', 'npf_features'])),
         share_embed=False,
         num_classes=num_nodes,
         # network configurations

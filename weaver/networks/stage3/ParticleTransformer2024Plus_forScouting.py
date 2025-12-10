@@ -4,6 +4,7 @@ Paper: "Particle Transformer for Jet Tagging" - https://arxiv.org/abs/2202.03772
 '''
 import math
 import random
+import numpy as np  # debug!!
 import copy
 from functools import partial
 from typing import Optional, Tuple, Any, Callable
@@ -934,7 +935,7 @@ class ParticleTransformer(nn.Module):
                     output_cls, output_rest = output.split([num_cls, output.size(1) - num_cls], dim=1)
                     output_cls = torch.softmax(output_cls, dim=1)
                     #output = torch.cat([output_cls, output_rest], dim=-1)
-
+                    
                     prob_indices = {
                         'probXbb': 0, 'probXcc': 1, 'probXss': 2, 'probXqq': 3,
                         'probXpbc': 4, 'probXmbc': 5, 'probXbs': 6,
@@ -1053,10 +1054,10 @@ class ParticleTransformer(nn.Module):
                         massCorr_W2p,
                         output_rest[:, [mass_corr_indices['massCorrResonance']]]
                     ], dim=1)  # 4个特征
-
+                    
                     # ===== 最终输出合并 =====
                     output = torch.cat([new_probs, selected_mass_corr], dim=1)  # 15 + 4 = 19个特征
-
+                    
                 if self.export_params.get('concat_hid', False):
                     output = torch.cat([output, x_cls], dim=-1)
 
@@ -1240,90 +1241,195 @@ class ParticleTransformerTagger_ncoll(nn.Module):
         # v: (N, 4, P) [px,py,pz,energy]
         # mask: (N, 1, P) -- real particle = 1, padded = 0
 
-        def pad_to_fixed(tensor_list, target_length):
-            """
-            tensor_list: list中每个 tensor 的形状为 (C, L_i)，其中 L_i 可能不一致
-            返回：形状 (N, C, target_length) 的 tensor，
-                    若 L_i < target_length，则在末尾填0；
-                    若 L_i > target_length，则截断到 target_length。
-            """
-            padded_list = []
-            for t in tensor_list:
-                L = t.shape[1]
-                if L < target_length:
-                    pad_size = target_length - L
-                    t_pad = F.pad(t, (0, pad_size), mode='constant', value=0)
-                elif L > target_length:
-                    t_pad = t[:, :target_length]
-                else:
-                    t_pad = t
-                padded_list.append(t_pad.unsqueeze(0))
-            return torch.cat(padded_list, dim=0)
-
         if len(args) == 3:
             with torch.no_grad():
-                pf_features, pf_vectors, pf_mask, _ = self.trimmers[0](args[0], args[1], args[2])
-                batch_size, _, P = pf_features.shape
-
-                # 生成批次和粒子的索引模板
-                batch_idx = torch.arange(batch_size, device=pf_features.device)[:, None].expand(-1, P)
-                particle_idx = torch.arange(P, device=pf_features.device).expand(batch_size, -1)
-
-                # 计算带电/中性掩码
-                is_charged = pf_features[:, 1, :] != 0  # (batch_size, P)
-                is_neutral = ~is_charged
-
-                # 定义特征索引
-                charged_feat_indices = [10, 19, 8, 7, 9, 1, 2, 3, 4, 20, 11, 0, 12, 18, 13, 14, 15, 16, 17]
-                neutral_feat_indices = [10, 19, 8, 7, 9, 5, 6]
-
-                # 预处理特征张量
-                pf_charged_feats = pf_features[:, charged_feat_indices, :]  # (B,19,P)
-                pf_neutral_feats = pf_features[:, neutral_feat_indices, :]   # (B,7,P)
-
-                # 带电粒子处理
-                # 生成索引
-                charged_flat_mask = is_charged.flatten()
-                selected_batch_charged = batch_idx.flatten()[charged_flat_mask]
-                selected_particle_charged = particle_idx.flatten()[charged_flat_mask]
-
-                # 收集特征和向量
-                charged_feats_all = pf_charged_feats[selected_batch_charged, :, selected_particle_charged].T  # (19, total_charged)
-                charged_vecs_all = pf_vectors[selected_batch_charged, :, selected_particle_charged].T          # (4, total_charged)
-
-                # 分割到各个样本
-                charged_counts = is_charged.sum(dim=1).tolist()
-                charged_feats_list = list(torch.split(charged_feats_all, charged_counts, dim=1))
-                charged_vecs_list = list(torch.split(charged_vecs_all, charged_counts, dim=1))
-                charged_masks_list = [torch.ones((1, c.shape[1]), device=pf_mask.device, dtype=pf_mask.dtype) 
-                                    for c in charged_vecs_list]
-
-                # 中性粒子处理（同理）
-                neutral_flat_mask = is_neutral.flatten()
-                selected_batch_neutral = batch_idx.flatten()[neutral_flat_mask]
-                selected_particle_neutral = particle_idx.flatten()[neutral_flat_mask]
-
-                neutral_feats_all = pf_neutral_feats[selected_batch_neutral, :, selected_particle_neutral].T  # (7, total_neutral)
-                neutral_vecs_all = pf_vectors[selected_batch_neutral, :, selected_particle_neutral].T         # (4, total_neutral)
-
-                neutral_counts = is_neutral.sum(dim=1).tolist()
-                neutral_feats_list = list(torch.split(neutral_feats_all, neutral_counts, dim=1))
-                neutral_vecs_list = list(torch.split(neutral_vecs_all, neutral_counts, dim=1))
-                neutral_masks_list = [torch.ones((1, n.shape[1]), device=pf_mask.device, dtype=pf_mask.dtype)
-                                    for n in neutral_vecs_list]
-
-                # 后续填充操作保持不变
-                charged_feats_padded = pad_to_fixed(charged_feats_list, 90)
-                charged_vecs_padded = pad_to_fixed(charged_vecs_list, 90)
-                charged_masks_padded = pad_to_fixed(charged_masks_list, 90)
-                neutral_feats_padded = pad_to_fixed(neutral_feats_list, 60)
-                neutral_vecs_padded = pad_to_fixed(neutral_vecs_list, 60)
-                neutral_masks_padded = pad_to_fixed(neutral_masks_list, 60)
-
+                pf_features, pf_vectors, pf_mask = args[0], args[1], args[2]
+                batch_size = pf_features.size(0)
+                P = pf_features.size(2)
+                '''
+                # ----------------------- 调试输出：原始输入信息 -----------------------
+                batch_idx = 0  # 查看第一个样本
+                print("\n========== 原始输入信息 ==========")
+                print(f"Batch {batch_idx} 的原始输入形状:")
+                print(f"pf_features: {pf_features.shape}")
+                print(f"pf_vectors : {pf_vectors.shape}")
+                print(f"pf_mask    : {pf_mask.shape}\n")
+                
+                print("前5个粒子的原始数据:")
+                for p in range(P):
+                    valid = pf_mask[batch_idx, 0, p].item()
+                    feat1 = pf_features[batch_idx, 1, p].item()
+                    vec = pf_vectors[batch_idx, :, p].cpu().numpy()
+                    print(f"粒子 {p}: pf_mask={valid}, 特征[1]={feat1:.2f}, 向量={vec}")
+                # ----------------------------------------------------------------------
+                '''
+                # 定义空列表保存每个样本的处理结果
+                charged_feats_list = []
+                charged_vecs_list = []
+                charged_masks_list = []
+                neutral_feats_list = []
+                neutral_vecs_list = []
+                neutral_masks_list = []
+                
+                # 对每个样本仅循环一次
+                for i in range(batch_size):
+                    feat = pf_features[i]  # 形状: (通道数, P)，例如(28, P)
+                    vec = pf_vectors[i]    # 形状: (4, P)
+                    # 取出对应的原始 mask，形状 (P,)
+                    mask_sample = pf_mask[i, 0, :]
+                    # 根据通道1及原始 mask 判断带电粒子（同时保证对应pf_mask有效）
+                    is_charged = (feat[1] != 0) & (mask_sample != 0)
+                    
+                    # ----------------------- 带电粒子部分 -----------------------
+                    c_pt_log       = feat[10][is_charged]
+                    c_e_log        = feat[19][is_charged]
+                    c_etarel       = feat[8][is_charged]
+                    c_phirel       = feat[7][is_charged]
+                    c_abseta       = feat[9][is_charged]
+                    c_charge       = feat[1][is_charged]
+                    c_isEl         = feat[2][is_charged]
+                    c_isMu         = feat[3][is_charged]
+                    c_isChargedHad = feat[4][is_charged]
+                    c_lostInnerHits= feat[20][is_charged]
+                    c_normchi2     = feat[11][is_charged]
+                    c_quality      = feat[0][is_charged]
+                    c_dz           = feat[12][is_charged]
+                    c_dzsig        = feat[18][is_charged]
+                    c_dxy          = feat[13][is_charged]
+                    c_dxysig       = feat[14][is_charged]
+                    c_btagEtaRel   = feat[15][is_charged]
+                    c_btagPtRatio  = feat[16][is_charged]
+                    c_btagPParRatio= feat[17][is_charged]
+                    charged_feats = torch.stack([
+                        c_pt_log, c_e_log, c_etarel, c_phirel, c_abseta,
+                        c_charge, c_isEl, c_isMu, c_isChargedHad, c_lostInnerHits,
+                        c_normchi2, c_quality, c_dz, c_dzsig, c_dxy,
+                        c_dxysig, c_btagEtaRel, c_btagPtRatio, c_btagPParRatio
+                    ], dim=0)  # 形状: (19, num_charged)
+                    charged_vecs = vec[:, is_charged]  # 形状: (4, num_charged)
+                    # 使用原始mask信息过滤，保持有效粒子的mask（形状: (1, num_charged)）
+                    charged_mask = mask_sample[is_charged].unsqueeze(0)
+                    # ------------------------------------------------------------
+                    
+                    # ----------------------- 中性粒子部分 -----------------------
+                    n_pt_log       = feat[10][~is_charged]
+                    n_e_log        = feat[19][~is_charged]
+                    n_etarel       = feat[8][~is_charged]
+                    n_phirel       = feat[7][~is_charged]
+                    n_abseta       = feat[9][~is_charged]
+                    n_isGamma      = feat[5][~is_charged]
+                    n_isNeutralHad = feat[6][~is_charged]
+                    neutral_feats = torch.stack([
+                        n_pt_log, n_e_log, n_etarel, n_phirel, n_abseta, n_isGamma, n_isNeutralHad
+                    ], dim=0)  # 形状: (7, num_neutral)
+                    neutral_vecs = vec[:, ~is_charged]  # 形状: (4, num_neutral)
+                    # 同样使用原始mask过滤
+                    neutral_mask = mask_sample[~is_charged].unsqueeze(0)
+                    # ------------------------------------------------------------
+                    
+                    charged_feats_list.append(charged_feats)
+                    charged_vecs_list.append(charged_vecs)
+                    charged_masks_list.append(charged_mask)
+                    neutral_feats_list.append(neutral_feats)
+                    neutral_vecs_list.append(neutral_vecs)
+                    neutral_masks_list.append(neutral_mask)
+                
+                # ----------------------- 对各部分进行填充 -----------------------
+                # 带电部分：固定填充到长度90
+                padded_charged_feats = []
+                for t in charged_feats_list:
+                    cur_len = t.size(1)
+                    if cur_len < 90:
+                        pad_size = 90 - cur_len
+                        t_padded = F.pad(t, (0, pad_size), value=0)
+                    else:
+                        t_padded = t[:, :90]
+                    padded_charged_feats.append(t_padded)
+                charged_feats_padded = torch.stack(padded_charged_feats, dim=0)  # (N, 19, 90)
+                
+                padded_charged_vecs = []
+                for t in charged_vecs_list:
+                    cur_len = t.size(1)
+                    if cur_len < 90:
+                        pad_size = 90 - cur_len
+                        t_padded = F.pad(t, (0, pad_size), value=0)
+                    else:
+                        t_padded = t[:, :90]
+                    padded_charged_vecs.append(t_padded)
+                charged_vecs_padded = torch.stack(padded_charged_vecs, dim=0)  # (N, 4, 90)
+                
+                padded_charged_masks = []
+                for t in charged_masks_list:
+                    cur_len = t.size(1)
+                    if cur_len < 90:
+                        pad_size = 90 - cur_len
+                        t_padded = F.pad(t, (0, pad_size), value=0)
+                    else:
+                        t_padded = t[:, :90]
+                    padded_charged_masks.append(t_padded)
+                charged_masks_padded = torch.stack(padded_charged_masks, dim=0)  # (N, 1, 90)
+                
+                # 中性部分：固定填充到长度60
+                padded_neutral_feats = []
+                for t in neutral_feats_list:
+                    cur_len = t.size(1)
+                    if cur_len < 60:
+                        pad_size = 60 - cur_len
+                        t_padded = F.pad(t, (0, pad_size), value=0)
+                    else:
+                        t_padded = t[:, :60]
+                    padded_neutral_feats.append(t_padded)
+                neutral_feats_padded = torch.stack(padded_neutral_feats, dim=0)  # (N, 7, 60)
+                
+                padded_neutral_vecs = []
+                for t in neutral_vecs_list:
+                    cur_len = t.size(1)
+                    if cur_len < 60:
+                        pad_size = 60 - cur_len
+                        t_padded = F.pad(t, (0, pad_size), value=0)
+                    else:
+                        t_padded = t[:, :60]
+                    padded_neutral_vecs.append(t_padded)
+                neutral_vecs_padded = torch.stack(padded_neutral_vecs, dim=0)  # (N, 4, 60)
+                
+                padded_neutral_masks = []
+                for t in neutral_masks_list:
+                    cur_len = t.size(1)
+                    if cur_len < 60:
+                        pad_size = 60 - cur_len
+                        t_padded = F.pad(t, (0, pad_size), value=0)
+                    else:
+                        t_padded = t[:, :60]
+                    padded_neutral_masks.append(t_padded)
+                neutral_masks_padded = torch.stack(padded_neutral_masks, dim=0)  # (N, 1, 60)
+                # ------------------------------------------------------------
+                '''
+                # ----------------------- 调试输出：处理后的信息 -----------------------
+                print("\n========== 处理后的信息 ==========")
+                # 带电部分
+                charged_feats_np = charged_feats_padded[batch_idx].detach().cpu().numpy()
+                charged_masks_np = charged_masks_padded[batch_idx].detach().cpu().numpy()
+                print(f"\n带电粒子特征形状: {charged_feats_np.shape}")
+                print("前5个带电粒子特征（处理后）:")
+                for p in range(charged_feats_np.shape[1]):
+                    print(f"位置 {p}: mask={charged_masks_np[0, p]}, 特征={charged_feats_np[:, p]}")
+                
+                # 中性部分
+                neutral_feats_np = neutral_feats_padded[batch_idx].detach().cpu().numpy()
+                neutral_masks_np = neutral_masks_padded[batch_idx].detach().cpu().numpy()
+                print(f"\n中性粒子特征形状: {neutral_feats_np.shape}")
+                print("前5个中性粒子特征（处理后）:")
+                for p in range(neutral_feats_np.shape[1]):
+                    print(f"位置 {p}: mask={neutral_masks_np[0, p]}, 特征={neutral_feats_np[:, p]}")
+                
+                print("====================================\n")
+                # ----------------------------------------------------------------------
+                '''
+                
                 new_args = [
                     charged_feats_padded, charged_vecs_padded, charged_masks_padded,
                     neutral_feats_padded, neutral_vecs_padded, neutral_masks_padded
-                    ]
+                ]
         else:
             new_args = args
 

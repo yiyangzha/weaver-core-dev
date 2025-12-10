@@ -27,8 +27,8 @@ ARG="--run-mode train --train-mode hybrid \
 --num-workers 8 --fetch-step 1. --data-split-num 20 \
 --network-config networks/stage3/example_GloParT3_forScouting.py \
 --data-train \
-t_qcd:./datasets/20250313_ak8_scouting/QCD_PT-mixed_TuneCP5_13p6TeV_pythia8/*.root \
-t_h0hphm:./datasets/20250313_ak8_scouting/H0HpHm_mixed/*.root \
+t_qcd:./datasets/20250313_ak8_scouting/QCD_PT-mixed_TuneCP5_13p6TeV_pythia8_new/*.root \
+t_h0hphm:./datasets/20250313_ak8_scouting/H0HpHm_mixed_new/*.root \
 --data-test \
 qcd300to470_0:./datasets/20250313_ak8_scouting/infer/QCD_PT-300to470_TuneCP5_13p6TeV_pythia8/*.root \
 qcd470to600_0:./datasets/20250313_ak8_scouting/infer/QCD_PT-Low_mixed/*.root \
@@ -42,11 +42,25 @@ higlo:./datasets/20250313_ak8_scouting/infer/Hig_Low_mixed/*.root \
 hphmhi:./datasets/20250313_ak8_scouting/infer/HpHm_High_mixed/*.root \
 hphmlo:./datasets/20250313_ak8_scouting/infer/HpHm_Low_mixed/*.root \
 2024winter_qcdlo:./datasets/20250313_ak8_scouting/infer/2024winter/QCD_PT_Low_TuneCP5_13p6TeV_pythia8/*.root \
-2024winter_qcdhi:./datasets/20250313_ak8_scouting/infer/2024winter/QCD_PT_High_TuneCP5_13p6TeV_pythia8/*.root \
---samples-per-epoch $((1500 * 512 / $NGPUS)) --samples-per-epoch-val $((100 * 512)) \
+2024winter_qcdhi:./datasets/20250313_ak8_scouting/infer/2024winter/QCD_PT_High_TuneCP5_13p6TeV_pythia8/*.root \--samples-per-epoch $((1500 * 512 / $NGPUS)) --samples-per-epoch-val $((100 * 512)) \
 --data-config ${config} \
 --model-prefix model/${PREFIX}/net \
 --predict-output predict/$PREFIX/pred.root "
+
+#qcd300to470_0:./datasets/20250313_ak8_scouting/infer/QCD_PT-300to470_TuneCP5_13p6TeV_pythia8/*.root \
+#qcd470to600_0:./datasets/20250313_ak8_scouting/infer/QCD_PT-Low_mixed/*.root \
+#qcd470to600_1:./datasets/20250313_ak8_scouting/infer/QCD_PT-Low_plus/*.root \
+#qcd470to600_2:./datasets/20250313_ak8_scouting/infer/QCD_PT-470to600_TuneCP5_13p6TeV_pythia8/*.root \
+#qcd600to800_0:./datasets/20250313_ak8_scouting/infer/QCD_PT-600to800_TuneCP5_13p6TeV_pythia8/*.root \
+#qcd1000to1400_0:./datasets/20250313_ak8_scouting/infer/QCD_PT-High_mixed/*.root \
+#qcd1000to1400_1:./datasets/20250313_ak8_scouting/infer/QCD_PT-High_plus/*.root \
+#highi:./datasets/20250313_ak8_scouting/infer/Hig_High_mixed/*.root \
+#higlo:./datasets/20250313_ak8_scouting/infer/Hig_Low_mixed/*.root \
+#hphmhi:./datasets/20250313_ak8_scouting/infer/HpHm_High_mixed/*.root \
+#hphmlo:./datasets/20250313_ak8_scouting/infer/HpHm_Low_mixed/*.root \
+#2024winter_qcdlo:./datasets/20250313_ak8_scouting/infer/2024winter/QCD_PT_Low_TuneCP5_13p6TeV_pythia8/*.root \
+#2024winter_qcdhi:./datasets/20250313_ak8_scouting/infer/2024winter/QCD_PT_High_TuneCP5_13p6TeV_pythia8/*.root \
+#cmssw_test:/afs/ihep.ac.cn/users/y/yiyangzhao/Research/CMS_THU_Space/GloParT/DNNtuple/signal/BulkGravitonToHHTo4QGluLTau_MH-125_LowPt/DNNtupleNanov15/dnnTuples_nanov15_11751806-0.root \
 
 if [ $RUN == "dryrun" ]; then
     echo "Dryrun mode"

@@ -5,6 +5,7 @@ Paper: "Particle Transformer for Jet Tagging" - https://arxiv.org/abs/2202.03772
 import math
 import random
 import copy
+import numpy as np
 from functools import partial
 from typing import Optional, Tuple, Any, Callable
 
@@ -1116,9 +1117,34 @@ class ParticleTransformerTagger_ncoll(nn.Module):
         assert len(args) == 3 * self.num_colls
 
         with torch.no_grad():
+            '''
+            if False:  # 调试开关
+                batch_idx = 0
+                print("\n========== 处理后的信息 ==========")
+                # 带电部分
+                charged_feats = args[0][batch_idx].detach().cpu().numpy()
+                charged_masks = args[2][batch_idx].detach().cpu().numpy()
+                
+                print(f"\n带电粒子特征形状: {charged_feats.shape}")
+                print("带电粒子特征（处理后）:")
+                for p in range(charged_feats.shape[1]):
+                    print(f"位置 {p}: mask={charged_masks[0, p]}, 特征={charged_feats[:, p]}")
+
+                # 中性部分
+                neutral_feats = args[3][batch_idx].detach().cpu().numpy()
+                neutral_masks = args[5][batch_idx].detach().cpu().numpy()
+                
+                print(f"\n中性粒子特征形状: {neutral_feats.shape}")
+                print("中性粒子特征（处理后）:")
+                for p in range(neutral_feats.shape[1]):
+                    print(f"位置 {p}: mask={neutral_masks[0, p]}, 特征={neutral_feats[:, p]}")
+
+                print("====================================\n")
+            '''
             x, v, mask = [], [], []
             for i in range(self.num_colls):
                 x_, v_, mask_, _ = self.trimmers[i](args[i*3], args[i*3+1], args[i*3+2])
+                
                 x.append(x_)
                 v.append(v_)
                 mask.append(mask_)

@@ -3,7 +3,7 @@
 
 # to select scouting jets, ensure that QCD scouting jets from the resonant (signal) samples are not included (they are not excluded in the samples; only reco QCD jets are excluded)
 selection: >-
-    (jet_tightId==1) & (jet_no<2) & (scoutfj_pt>200) & (scoutfj_pt<5000) & (scoutfj_sdmass>0) & (scoutfj_sdmass<650) & (ak.num(pfcand_px) > 0) &
+    (jet_tightId==1) & (jet_no<2) & (scoutfj_pt>200) & (scoutfj_pt<5000) & (scoutfj_sdmass>0) & (scoutfj_sdmass<650) & (ak.num(scoutpfcand_px) > 0) &
     (
       ((sample_isQCD==1) & (scoutfj_label >= 309) & (scoutfj_label < 314) & (event_no%7!=0)) |
       ((sample_isQCD==0) & (scoutfj_isQCD==0))
@@ -68,6 +68,8 @@ new_variables:
         ak.where((scoutfj_label >= 25) & (scoutfj_label <= 29), scoutfj_label - 13,
         ak.where((scoutfj_label >= 309) & (scoutfj_label <= 313), scoutfj_label - 292, 10000)))))))))))
 
+    scoutpfcand_mask: ak.ones_like(scoutpfcand_energy)
+
 preprocess:
     ### method: [manual, auto] - whether to use manually specified parameters for variable standardization
     method: manual
@@ -86,40 +88,40 @@ inputs:
             ###              clip_min(optional, default=-5),
             ###              clip_max(optional, default=5),
             ###              pad_value(optional, default=0)]
-            - [pfcand_quality, 0, 0.2]
-            - pfcand_charge
-            - pfcand_isEl
-            - pfcand_isMu
-            - pfcand_isChargedHad
-            - pfcand_isGamma
-            - pfcand_isNeutralHad
-            - pfcand_phirel
-            - pfcand_etarel
-            - [pfcand_abseta, 0.6, 1.6]
-            - [pfcand_pt_log, 1, 0.5]
-            - [pfcand_normchi2, 5, 0.2]
-            - [pfcand_dz, 0, 180]
-            - [pfcand_dxy, 0.0, 300]
-            - [pfcand_dxysig, 0, 1.0]
-            - [pfcand_btagEtaRel, 1.5, 0.5]
-            - [pfcand_btagPtRatio, 0, 1]
-            - [pfcand_btagPParRatio, 0, 1]
-            - [pfcand_dzsig, 0, 0.9]
-            - [pfcand_e_log_nopuppi, 1.3, 0.5] #
-            - pfcand_lostInnerHits
+            - [scoutpfcand_quality, 0, 0.2]
+            - scoutpfcand_charge
+            - scoutpfcand_isEl
+            - scoutpfcand_isMu
+            - scoutpfcand_isChargedHad
+            - scoutpfcand_isGamma
+            - scoutpfcand_isNeutralHad
+            - scoutpfcand_phirel
+            - scoutpfcand_etarel
+            - [scoutpfcand_abseta, 0.6, 1.6]
+            - [scoutpfcand_pt_log, 1, 0.5]
+            - [scoutpfcand_normchi2, 5, 0.2]
+            - [scoutpfcand_dz, 0, 180]
+            - [scoutpfcand_dxy, 0.0, 300]
+            - [scoutpfcand_dxysig, 0, 1.0]
+            - [scoutpfcand_btagEtaRel, 1.5, 0.5]
+            - [scoutpfcand_btagPtRatio, 0, 1]
+            - [scoutpfcand_btagPParRatio, 0, 1]
+            - [scoutpfcand_dzsig, 0, 0.9]
+            - [scoutpfcand_e_log, 1.3, 0.5] #
+            - scoutpfcand_lostInnerHits
     pf_vectors:
         length: 200
         pad_mode: wrap
         vars:
-            - [pfcand_px, null]
-            - [pfcand_py, null]
-            - [pfcand_pz, null]
-            - [pfcand_energy, null]
+            - [scoutpfcand_px, null]
+            - [scoutpfcand_py, null]
+            - [scoutpfcand_pz, null]
+            - [scoutpfcand_energy, null]
     pf_mask:
         length: 200
         pad_mode: constant
         vars:
-            - pfcand_mask
+            - scoutpfcand_mask
 
 
 labels:
